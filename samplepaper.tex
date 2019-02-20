@@ -1,0 +1,575 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 	   美赛模板，正文部分		
+%          PAPER.tex
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[12pt]{article}
+
+% 请在此填写控制号、题号和标题，年份不需要填（自动以当前电脑时间年份为准）
+\usepackage[00000]{easymcm}\problem{A}
+\usepackage{palatino} % 这个是COMAP官方杂志采用的字体，如不需要可注释掉，以使用默认字体
+\bibliographystyle{plain}
+\title{Freeway Traffic Model Based on Cellular Automata and Monte-Carlo Method}  % 标题
+
+% 如您参加的是ICM（即选择了D/E/F题），请使用以下的命令修改Summary Sheet 题头
+% \renewcommand{\contest}{Interdisciplinary Contest in Modeling (ICM) Summary Sheet}
+
+% 正文开始
+\begin{document}
+\input{ABSTRACT.tex}		% 摘要请到ABSTRACT.tex中填写
+
+\section{Introduction}
+Today, about 65\% of the world's population live in countries with right-hand traffic and 35\% in countries with left-hand traffic\cite{Aumueller2016}. In countries with right-hand traffic, like USA and China, regulations request driving and walking keep to the right side of the road. Multi-lane freeways in these countries often employ a rule that requires drivers to drive in the right-most lane unless they are passing another vehicle, in which case they move one lane to the left, pass, and return to their former travel lane. This rule on driving and overtaking is referred to as the ``Keep right except to pass'' rule, or the keep-right rule in our paper. The rule in countries with left-hand traffic is exactly mirror symmetrical to the keep-right rule (``Keep left except to pass''). So, what is the purpose of applying such a rule? Does the keep-right rule ameliorate the freeway traffic condition? Transportation free of the restriction of the keep-right rule (Vehicles can choose either side for overtaking.) is referred to as obeying the unrestricted rule. How does the keep-right rule perform comparing with the unrestricted rule?
+
+Based on the Cellular Automata model and the Monte Carlo algorithm, we establish a model to simulate freeway traffic under different conditions (under the keep-right rule or the unrestricted rule, in light traffic or in heavy traffic, 2-lane or 3-lane per direction). Our model is divided into 3 sub-models: the inflow model, the vehicle-following model and the overtaking model. The inflow model employs the Poisson probability distribution for the simulation of the vehicle-generation process. The vehicle-following model introduces a special probability distribution model which makes the simulation of the process of a car following another more realistic. The overtaking model simulates the overtaking behavior and defines the danger index to evaluate the safety risk of a certain freeway. We also build an extended model for transportation under the control of an intelligent system.
+
+We implement the model in MATLAB, and obtain sufficient data. We test the average velocity, the density, the overtaking rate and the danger index, analyze their properties and assess the performance of the keep-right rule by comparison with the unrestricted rule. In addition, we analyze the sensitivity of our model under different speed limits. It turns out that our model is robust.
+
+Then we come to our conclusions which consist with common sense. We also put forward a new rule for transportation under the control of an intelligent system.
+
+\begin{table}[!htbp]
+\begin{center}
+\caption{Notation}
+\begin{tabular}{cl}
+	\toprule
+	\multicolumn{1}{m{3cm}}{\centering Symbol}
+	&\multicolumn{1}{m{8cm}}{\centering Definition}\\
+	\midrule
+	$V$&current velocity of the vehicle\\
+	$V_m$&maximum velocity of the vehicle\\
+	$V_l$&the upper speed limit of the freeway\\
+    $V_0$&the velocity before overtaking\\
+    $V_1$&the velocity in the overtaking process\\
+    $G$&the distance between a vehicle and the vehicle ahead of it\\
+    $G_s$&the minimum gap required for safety consideration\\
+    $G_0$&the minimum gap after the vehicle stops\\
+    $T_r$&PIEV time (human reaction time)\\
+    $P_o$&the overtaking probability\\
+    $P_a$&the acceleration probability\\
+    $P_b$&the deceleration probability\\
+    $f$&the frictional force when braking\\
+    $d$&danger index in one overtaking event\\
+    $D$&danger index of the road system\\
+    $a$&the acceleration during overtaking\\
+    $a_p$&the component parallel to the lane of acceleration during overtaking\\
+    $a_d$&the available deceleration\\
+	\bottomrule
+\end{tabular}\label{tb:notation}
+\end{center}
+\end{table}
+
+\subsection{Terminology}
+\begin{itemize}
+    \item \textbf{Two-lane road:} Two lanes on the right-half of the road, four lanes in total.
+    \item \textbf{Three-lane road:} Three lanes on the right-half of the road, six lanes in total.
+    \item \textbf{Danger index:} An index designed in our paper to evaluate the danger of the road system.
+    \item \textbf{Minimum safety gap:} The distance between two vehicles that deemed safe enough in our model.
+    \item \textbf{Keep-right rule:} Keep right except to pass rule.
+    \item \textbf{Unrestricted rule:} Vehicles are not restricted and can overtake others from either side.
+    \item \textbf{Free-driving style:} When there is no vehicles nearby, drivers will not accelerate or decelerate deliberately,but the speed will still fluctuate slightly.
+\end{itemize}
+
+\subsection{Assumptions}
+\begin{itemize}
+    \item The road is straight and there is no bypass.
+    \item The width of one lane is only enough for one vehicle.
+    \item All vehicles have the same volume.
+    \item There are only two kinds of vehicles on the road (fast one and slow one).
+    \item The environment and climate are good for driving.
+    \item Driving on the right is the norm.
+    \item Pedestrians are ignored.
+\end{itemize}
+
+\section{The Models}
+\subsection{Design of Cellular Automata}
+Large quantities of former traffic simulations\cite{Aumueller2015} based on Cellular Automata (CA) indicate that CA model is a feasible and effective method to emulate traffic flow. Space, time and status are all discrete in Cellular Automata. For example, the model divides the road into small rectangular cells, and time is divided into small units. This feature predigests the simulation process significantly. Besides, the status of a cell is controlled by its neighboring cells following a set of rules, which is much similar to real-life traffic where a car's movement largely depends on its neighboring cars' movement. Therefore, it is rational for us to apply Cellular Automata in solving our problem.
+
+In our simulation, we divide each lane into 1000 cells. Each cell is 4 meters long in length and width and has two properties, the current velocity $V$ and the maximum velocity $V_m$. A cell is empty when $V$ is 0, because a car won't stop in our crash-free simulation. We consider only one direction of the freeway for simplicity. Thus, a freeway of n lanes is converted into an $n\times 1000$ matrix.
+
+In our simulation, we employ two kinds of vehicles, faster ones to simulate the cars and slower ones to simulate the trucks.
+
+For each lane, the first 6 cells are used as car-generation area, traffic flow is observed in the last 10 cells and traffic density is calculated on the basis of the last 500 cells.Our model updates once per second, while the period $T = 1$\,s is the average reaction time of a driver.
+
+We discuss the basic processes for the CA model:
+
+\begin{itemize}
+    \item \textbf{Inflow process:} According to the inflow model that we will discuss later, assign vehicles in the vehicle-generation area.
+    \item \textbf{Acceleration process:} If $V<V_m$, a vehicle accelerates by $\Delta V$, and the new speed is $V'=V+\Delta V$.
+    \item \textbf{Deceleration process:} If the distance between a vehicle and the vehicle ahead of it (Front bumper to front bumper distance, we call it the gap, and the gap is denoted by $G$ and its unit is cell. When there is no vehicle ahead, $G$ is set to $+\infty$.) is no more than $V$, the vehicle decelerates to $V'=(G-1)/T$.
+    \item \textbf{Moving Process:} Vehicles move forward by $V'\times T$ cells only when $G>G_S(V')$. ($G_S(V')$ is the minimum gap required for safety consideration, and is to be defined later.)
+\end{itemize}
+
+Specific rules will be set in the inflow model, the following model and the overtaking model to simulate traffic under the Keep-Right-Except-To-Pass rule and traffic under no such restriction.
+\subsection{Inflow Model}
+The inflow model, or the vehicle-generation model, simulates the stochastic arrivals of vehicles at the entrance of the freeway.For each lane, the first six cells in the cellular automata are set as vehicle-generation area. We assume that the arrival of each vehicle obeys the binomial probability distribution. Let $t_s$ denote the sampling time interval and $N$ denote the total of vehicle arrivals during $t_s$. Then $N$ can be approximated to obey the Poisson probability distribution. Let $P_{t_s}(N)$ be the probability of $N$ and we have
+
+\[P_{t_s}(N)=\frac{\lambda^N}{N!} \mathrm{e}^{-\lambda}, N>0\]
+
+With $t_s$ being one second in our implementation, we can assign the expectation of $N$ to a range of values from 0 to 3.6. $N$ being the total of vehicle arrivals in each second, the expectation of $N$, can effectively reflect the traffic condition. The smaller the $\lambda$ is, the lighter the traffic is; the greater, the heavier. Thus we are able to simulate different traffic conditions, light or heavy, by assigning corresponding values to $\lambda$. After the value of $\lambda$ is set, we get the stochastic number of vehicles entering the freeway for every second in simulation. Which lane to enter is then randomly assigned.
+
+Our model supports two kinds of vehicles of different velocity ranges, the initial speed of all vehicles are set to 20\,m/s. Such practice brings simplification and doesn't weaken the result.
+
+That is because the speed of all vehicles tends to converge toward a value controlled by the traffic density and by the distribution of acceleration probability which is to be introduced later. When traffic density is low, vehicles can always accelerate freely to the maximum speed without worrying about collisions, so the convergence speed is near the highest speed allowed. When traffic density is high, all the lanes will be filled with vehicles, and the speed of the traffic flow is decided by the speed of the slowest vehicle on the lane, so the convergence speed is near the lower speed limit. The preliminary analysis on the convergence speed will be justified by later implementation of the model.
+
+The utilization of the Poisson probability distribution makes our inflow model close to reality and practice. Because of the convergence tendency, the same initial speed policy can yield simplification without harm to the simulation.
+
+\subsection{Vehicle-Following Model}
+The Federal Highway Administration of the United States Department of Transportation defines, in its Manual on Uniform Traffic Control Devices, define driver's reaction time as PIEV time. PIEV time consists of four parts:
+
+\begin{itemize}
+    \item \textbf{Perception process:} A driver perceives the change in driving environment.
+    \item \textbf{Intellection process:} The driver analyzes the information about the change.
+    \item \textbf{Evaluation process:} The driver determines driving behaviour based on his ana\-lysis.
+    \item \textbf{Volition process:} The driver executes the driving behavior.
+\end{itemize}
+
+We apply the PIEV process in our vehicle-following model and overtaking model. In every time cycle, we first obtain the velocity and position of each vehicle, calculate the gap, and then determine the driving behavior (whether to continue following or to change lane for overtaking). According to driving behavior, compute the acceleration and update the speed and position.
+
+Decision on driving behavior based primarily on the current gap. If the gap $G$ is safe enough, acceleration is feasible; otherwise, the vehicle should slow down. Here, we define the minimum safe gap $G_s$ to be $T_r\times V$. ($T_r$ stands for the PIEV time, and $V$ is the current velocity.)
+
+We assume that decisions on driving behavior follow certain principles:
+
+\begin{itemize}
+    \item When $G>G_S$, the vehicle tends to accelerate (Later we will introduce a probability model to simulate the tendency.), until achieving the freeway speed limit or its maximum possible velocity;
+    \item When $G<G_S$, whether to overtake or to follow is determined by the overtaking probability $P_0$ and the overtaking conditions ($P_0$ and overtaking conditions are to be discussed in the overtaking model).
+\end{itemize}
+
+When following, a vehicle can accelerate, decelerate or keep the original speed. We introduce two parameters\cite{Chavey2010}, the acceleration probability $P_a$ and deceleration probability $P_b$. The higher the speed, the smaller the $P_a$ and the greater the $P_b$. $V_l$ represents the higher speed limit of the freeway, and $V_{max}$ is the maximum speed the vehicle can reach. This probability model takes into account the fact that speeding can’t be ignored. When $V>V_l$, $P_a$ gets even smaller and $P_b$ gets even bigger, which makes it possible for speeding but the possibility is small. We use a stochastic variable $R$ for implementation:
+
+\begin{itemize}
+    \item If $R<P_b$, the vehicle decelerates;
+    \item If $R>1-P_a$, the vehicle accelerates;
+    \item Otherwise, the vehicle maintains the current speed.
+\end{itemize}
+
+Based on the probability model, we create several rules for the Cellular Automata(The maximum possible speed of vehicle i is $V_{max}$, the current gap is $G$, the minimum safe gap is $G_s$ and its velocity is denoted as $V$, $P_a$ and $P_b$ are functions of velocity $V$, and $P_a+P_b\le 1$.) :
+
+\begin{itemize}
+    \item Free driving rule: If $G\ge G_S$, \[V'=\begin{cases}min(V_{max},V+1),&\text{ with probability }P_a;\\max(V_{min},V-1),&\text{ with probability }P_b;\\V,&\text{ others }.\end{cases}\]
+    \item Safe deceleration rule: If $G<G_S$ but won't crash if moving forward, \[V'=max(V_{min},V-1),\]where $V_{min}$ is under-posted the lower speed limit.
+    \item Crash-free rule: If moving forward causes crash, stop behind the former vehicle.
+\end{itemize}
+
+The values of $P_a$ and $P_b$ are listed in table \ref{tb:fastc} for fast cars, table \ref{tb:slowc} for slow ones.
+
+\begin{table}[!htbp]
+\begin{center}
+    \caption{Acceleration and deceleration probability for fast vehicles}
+\begin{tabular}{ccccccc}
+    \toprule
+    $V/cell\cdot s^{-1}$&3&4&5&6&7&8\\
+    \midrule
+    $P_a$&1&0.8&0.7&0.5&0.3&0\\
+    $P_b$&0&0.1&0.2&0.3&0.4&0.8\\
+    \bottomrule\label{tb:fastc}
+\end{tabular}
+    \caption{Acceleration and deceleration probability for slow vehicles}
+\begin{tabular}{ccccc}
+    \toprule
+    $V/cell\cdot s^{-1}$&3&4&5&6\\
+    \midrule
+    $P_a$&1&0.7&0.4&0\\
+    $P_b$&0&0.2&0.4&0.8\\
+    \bottomrule\label{tb:slowc}
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Overtaking Model}
+\subsubsection{Overtaking Probability}
+The driver will decide whether to overtake another car with the probability $P_0$.Probability $P_0$ depends on the vehicle $A$ and the vehicle $B$ ahead. Let $V_{max1}$ be the velocity of vehicle $A$, and $V_{max2}$ be the velocity of vehicle $B$. The probability Po satisfies:
+
+\[P_0=\begin{cases}1-0.9\cdot \mathrm{e}^{V_{max2}-V_{max1}},&\text{ if }  V_{max2}<V_{max1};\\0.1,&\text{ if } V_{max2}\ge V_{max1}.\end{cases}\]
+
+It is rational to assume that the larger the difference in velocity, the more likely the vehicle is to accelerate. The probability distribution reflects the tendency well.
+
+\subsubsection{Overtaking Condition}
+A driver cannot overtake as he pleases. Overtaking can be sometimes dangerous, and a vehicle should be able to overtake successfully, i.e. to return to the former lane, under the keep-right-except-to-pass rule. Thus, restrictions are made on overtaking.
+
+Condition of Overtaking:
+
+\begin{itemize}
+    \item The gap $G_0$ on the target lane is larger than $G_S$, and
+    \item the velocity of the vehicle is larger than that of the vehicle ahead.
+\end{itemize}
+
+\subsubsection{Danger Index}
+Here we redefine the minimum safe gap $G_S$ using a different method to calculate the danger index. The theoretical relationship between $G_S$ and the current velocity $V$ is:
+
+\[\frac12 mV^2=f(G_S-G_0)\]
+
+$f$ is the frictional force when braking; $G_0$ is the minimum gap after the vehicle stops.
+
+Considering normal driving speed is under 200\,km/h in reality and drivers' acceptance gap is usually larger than the theoretical safe value, and for the sake of simplicity of computer implementation, we approximate $G_S$, as a function of present speed $V$, to be linear to $V$.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=9cm]{figure1}
+    \caption{Relationship between safe-gap and velocity}
+    \label{fig:safevel}
+\end{figure}
+
+We set $G_0$ to be 10 meters, and use 0.7 as the friction coefficient. The linear relationship we get is
+
+\[G_S=10+2.8\times V\]
+
+When changing lanes for overtaking, a vehicle spare part of its acceleration to change the direction and the rest acceleration is to cope with the deceleration when facing emergency. So the assessment of safety for lane-changing should be different from that for vehicle-following.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics{figure2}
+    \caption{Velocity analysis}
+    \label{fig:velana}
+\end{figure}
+
+As is shown in figure \ref{fig:velana}, $V_0$ denotes the velocity before overtaking, $V_1$ denotes the velocity in the overtaking process and $a$ is the acceleration during overtaking. Empirically, $V_1=V_0-4$\,m/s (deceleration during lane-changing procedure for safety concern). Vehicles finish lane-changing in 1\,s, and we calculate the component parallel to the lane of $a$:
+
+\[a_p=V_0-V_1\cdot \cos(\arcsin(\frac{4}{V_1}))\]
+
+Then the deceleration available is
+
+\[a_d=6.86-a_p=6.86-(V_0-\sqrt{V_0^2-2V_0})\]
+
+The values of the available deceleration $a_d$ changes slightly as $V_0$ varies, so we set $a_d$ to $5.76\,\mathrm{m/s^2}$ for simplicity. $G_S$ changes to $10+3.4\cdot V$ accordingly.
+
+We create a function to assess the danger coefficient of a vehicle in unit time:
+
+\[d=\begin{cases}0,&\text{ if }  G_S-G_r<0;\\G_S-G_r,&\text{ if } G_S-G_r\ge 0.\end{cases}\]
+
+When $G_r\ge G_s$, we assume the danger is small enough to neglect, so the danger coefficient is set to 0. When $G_r<G_s$, we use the difference between $G_s$ and $G_r$ to calculate the danger coefficient. A higher danger coefficient indicates the driving state of the vehicle to be more dangerous.
+
+The danger coefficients of vehicle-following are similar in various road and rule conditions, so we consider only the danger coefficients of overtaking in further discussion.
+
+Now we define the danger index to indicate the risk of a certain road under a certain rule. Let $D$ be the sum of danger coefficients of overtaking events happened in 300\,s time :
+
+\[D=\sum_{t=1}^{300} A\cdot d\]
+
+The danger index is the average $D$ of all the vehicles. $A$ is a parameter defined as:
+
+\[A=\begin{cases}1,&\text{ when passing from left };\\3,&\text{ when passing from right }.\end{cases}\]
+
+According to research, if a left-hand drive vehicle (the vehicle controls located on the left hand side) tries to pass from the right side, driver’s sight will get restricted and thus increasing the danger index. We assume that the danger index of passing from the right side is three times higher than that of passing from the left side. So we set $A$ to 1 when passing from the left, and set $A$ to 3 when from the right.
+
+The danger index $D$ we introduced here is the basis to evaluate the safety of the road in our model.
+
+\subsection{Two Sets of Rules for CA Model}
+\subsubsection{Keep Right Except to Pass Rule}
+We analyze the performance of the keep-right-except-to-pass rule by comparing the outcomes from the model under this rule and the model without such restriction. Applying this rule demands some rules for the Cellular Automata (The rules are listed in descending priority, that is, if the first rule is satisfied, the following ones are to be neglected.):
+
+\begin{itemize}
+    \item If the gap $G$ in the right lane is larger than $G_s$, change to the right lane;
+    \item If the current gap $G$ is larger than $G_s$, apply the free driving rule set in the vehicle-following model;
+    \item If the gap $G$ in the left lane is larger than $G_s$, apply the overtaking model with probability $P_0$, and apply the following model with probability $1-P_0$.
+\end{itemize}
+
+\subsubsection{Unrestricted Rule}
+Likewise, when we implement the model without such restriction, another set of rules is needed (The rules are listed in descending priority, that is, if the first rule is satisfied, the following ones are to be neglected.):
+
+\begin{itemize}
+    \item If the current gap $G$ is larger than $G_s$, follow free driving rule employed in vehicle-following model;
+    \item If the overtaking conditions are satisfied, and the gap $G$ in the left lane is larger than $G_s$, apply the overtaking model to pass from the left side with probability $P_0$, and apply the vehicle-following model with probability $1-P_0$;.
+    \item If the overtaking conditions are satisfied, and the gap $G$ in the right lane is larger than $G_s$, apply the overtaking model to pass from the right side with probability $P_0$, and apply the vehicle-following model with probability $1-P_0$.
+\end{itemize}
+
+\section{Supplementary Analysis on the Model}
+\subsection{Design of the Acceleration and Deceleration Probability Distributions}
+The design of the acceleration and deceleration probability distributions we introduced in the vehicle-following model simulates the change in velocity during the driving process. The system can self-adjust the average velocity according to the density. When the density is small, the average velocity of the traffic flow is close to the average speed of a free-driving car which follows the probability distribution. When the density is large, slow cars on the road decelerate the following cars. In other words, slower cars in the lane determine the average velocity. When the freeway is relatively crowded, the expectation of the slowest speed decreases and thus affects the average velocity of the road.
+
+\subsection{Design to Avoid Collision}
+While simulating heavy traffic, we design rules to avoid car crashes. Normally, a freeway limits the lower speed, but when a vehicle finds itself too close to the one ahead, it can brake to avoid collision regardless of the lower speed limit. When the freeway is crowded, the frequency of deceleration to avoid collision rises, so the average velocity goes below the lower limit of speed.
+
+\section{Model Implementation with Computer}
+Based on the Cellular Automata model and Monte Carlo algorithm, we implement our model successfully via MATLAB. Starting from a simple situation, we first simulate a freeway of 2 lanes under the Keep-right rule. Then with a small change to the rules, we have the unrestricted 2-lane-freeway model for comparison. We work on to extend the model to simulate a freeway of 3 lanes and both rule conditions are realized. Moreover, traffic under a keep-left rule, with different speed limits as well as transportation directed by an intelligent system is also emulated. We test these models with different inflow rates in order to see the influence of traffic heaviness. Supported by sufficient simulated data, we are able to evaluate accurately the performance of the Keep right except to pass rule in light and heavy traffic, including the tradeoffs between flow and safety, the average speed, the traffic density and the overtaking frequency. And we further discuss the impact of a keep-left rule and that of an intelligent system. Figure spatiotemporal diagram of vehicles, expectation of inflow rate is 0.5\,veh/s, the ratio of smaller cars to larger vehicles is 1, three-lane. Figure \ref{fig:temspa} records positions of all the vehicles in every time cycle. Red represents smaller cars and green represents larger vehicles. Every three columns stand for the freeway state of one time cycle.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics{figure3}
+    \caption{Tempo-spatial distribution of vehicles}
+    \label{fig:temspa}
+\end{figure}
+
+\section{Data Analysis and Model Validation}
+\subsection{Average Velocity}
+Traffic flow is linear to the vehicle-generation rate. We choose the average velocity of the vehicle flow to reflect the traffic efficiency.We analyze the statistics from the two-lane model and the three-lane model, both under the keep-right rule and unrestricted. The relationships between the average speed and the inflow rate in various conditions are shown in the figure \ref{fig:avrvel2lanes} and figure \ref{fig:avrvel3lanes}.
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure4}\caption{Average velocity under different rules(2 lanes)}\label{fig:avrvel2lanes}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure5}\caption{Average velocity under different rules(3 lanes)}\label{fig:avrvel3lanes}
+    \end{minipage}
+\end{figure}
+
+It is clear that in the two-lane model, the keep-right rule yields faster average velocity in general.When it comes to the freeway of three lanes (by statistics) or more (by deduction), the keep-right rule doesn't improve the average velocity. We can see that when the vehicle-generation rate is over 0.75\,veh/s, the unrestricted rule outperform the keep-right rule according to the figure.
+
+High inflow rate may trigger traffic jam, as we can learn from the figure. When the inflow rate is higher than 1.8\,veh/s, the average velocity in both models goes below the lower speed limit of the freeway.
+
+If the interference of other vehicles is neglected (that is, a vehicle drives on an empty freeway under the free-driving rule), the average speed, or we call it the ideal speed, of slow vehicles is 19.44\,m/s, and the ideal speed of fast cars is 25.88\,m/s. (The data come from our MATLAB simulation.) We can see from figure 4 and 5 that when the inflow rate is low, the keep-right rule can almost reach the ideal speed, but the unrestricted rule gives a worse performance. We can conclude from the analysis that on a three-lane freeway, the Keep right except to pass rule promotes the average velocity of vehicle flow in light traffic but makes no improvement on traffic efficiency in heavy traffic. However on a two-lane freeway,the Keep right except to pass rule promotes the average velocity of vehicle flow prominently.
+
+\subsection{Average Velocity of Fast Cars}
+We calculated the average velocity of faster cars in the three-lane model. We mainly focus on the faster cars to study that to what extent the faster car is blocked by slower vehicles.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=9cm]{figure6}
+    \caption{Average velocity of fast cars}
+    \label{fig:avrvelf}
+\end{figure}
+
+The general tendency is going down for the following reasons:
+\begin{itemize}
+    \item Large vehicles (slower) may block the road resulting in the limited speed of small cars.
+    \item The more crowded the freeway is, the more will the average speed be affected by the slowest vehicle.
+\end{itemize}
+
+The velocity goes up when the inflow rate is relatively low. That is because at the beginning, the inflow rate is so low that cars have almost no companions to overtake, which makes them move in the free-driving style. As inflow rate goes high in the lower range (0- 0.5\,veh/s), cars have more chance to overtake so that their acceleration probability rises and their average velocity tends to increase. The tendency of the curve can also be interpreted as that denser traffic (within a certain range) stimulates drivers’ desire of overtaking.
+
+\subsection{Density}
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure7}
+    \caption{Density of traffic in each lanes (2 lanes, keep-right)}
+    \label{fig:dentra2kr}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure8}
+    \caption{Density of traffic in each lanes (2 lanes, unrestricted)}
+    \label{fig:dentra2un}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure9}
+    \caption{Density of traffic in each lanes (3 lanes, keep-right)}
+    \label{fig:dentra3kr}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure10}
+    \caption{Density of traffic in each lanes (3 lanes, unrestricted)}
+    \label{fig:dentra3un}
+\end{minipage}
+\end{figure}
+
+These four charts show the density in each lane under different rules. We find that the keep-right rule causes the unbalanced use of the road, which may result in different degrees of wear in the lanes in reality. So the repair for different lanes can be staggered which reduces the harm due to suspension of the lane under repair.
+
+\subsection{Overtaking Rate}
+We count the sum of overtaking or passing events happened in the three-lane model in five minutes.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=8cm]{figure11}
+    \caption{Passing events with different rules(3 lanes, 300s)}
+    \label{fig:paseve}
+\end{figure}
+
+Under the unrestricted rule, overtaking from the left and from the right are equivalent in priority, so the rates on both sides are approximately the same.
+
+Under the keep-right rule, most vehicles drive in the right lane if possible, and vacate the left lane, thus making the overtaking requirements easier to meet and causing the sum of passing events to be much more than that of the unrestricted left lane. High passing rate keeps faster cars from the limit produced by slower vehicles, which incarnates the quickness of the keep-right rule. Besides, too many passing events on the right lane harm the safety greatly. These data is very important for us to evaluate the danger index of the road system.
+
+\subsection{Danger Index}
+In light traffic, danger index is low; in heavy traffic, the freeway is crowded, and vehicles move relatively slow, so danger index is also low. Only when the density appears at a middle level, is the danger index $D_m$ high. We learn from the charts that $D_m$ under the keep-right rule is apparently lower than that of no restriction in both the two-lane and three-lane situations.
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure12}
+    \caption{Danger index with different rules (2 lanes)}
+    \label{fig:danin2}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure13}
+    \caption{Danger index with different rules (3 lanes)}
+    \label{fig:danin3}
+\end{minipage}
+\end{figure}
+
+\section{Sensitivity Evaluation of the Model under Different Speed Limitations}
+We modify the upper speed limit of the freeway, and the result supports that our simulation is robust. We tested the situation where the upper speed limit is changed from 32\,m/s to 28\,m/s and to 36\,m/s.
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure14}
+    \caption{Average velocity under different speed limits (3 lanes, keep-right)}
+    \label{fig:avrvel3kr}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure15}
+    \caption{Average velocity under different speed limits (3 lanes, unrestricted)}
+    \label{fig:avrvel3un}
+\end{minipage}
+\end{figure}
+
+Although speed limits differ, the data from the three models show a similar pattern: the lower the expectation of the vehicle-generation rate, the higher the average speed. This fact indicates that our model is applicable to a wide range of situations.
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure16}
+    \caption{Danger index under different speed limits (3 lanes, keep-right)}
+    \label{fig:danin3kr}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+    \includegraphics{figure17}
+    \caption{Danger index under different speed limits (3 lanes, unrestricted)}
+    \label{fig:danin3un}
+\end{minipage}
+\end{figure}
+
+We also calculate the corresponding danger indexes under different speed limitations, and the result consists with common sense. The higher the speed limitation, the more dangerous while driving.
+
+The speed limitation won’t make any remarkable changes in our model.
+
+\section{Driving on the left}
+We have discussed the right-hand traffic and now, let us consider the left-hand traffic. The situation is exactly mirror symmetrical to that with right-hand traffic. So we require the vehicles used in this model to be right-hand drive and make a switch of the left and the right in our former model. Then the situation of driving on the left is simulated.
+
+\section{Transportation under Intelligent System}
+\subsection{New Rule for Intelligent System}
+After our simulation on computer, we make a new rule for intelligent system to achieve the best performance:
+
+\begin{itemize}
+    \item When the inflow rate is lower than 1.5\,veh/s, a vehicle should follow the keep-right rule.
+    \item Otherwise, it follows the unrestricted rule.
+\end{itemize}
+
+We will explain why we choose such rules in the following part.
+
+\subsection{Adaptation of the Model}
+If the vehicle transportation on the roadway was fully under the control of an intelligent system, some conditions will be changed:
+
+\begin{itemize}
+    \item The response time of a driver no longer matters.
+    \item A vehicle no longer changes its speed randomly, but makes a change only when necessary.
+    \item The danger of changing lanes decreases prominently.
+    \item The risk of changing lanes from left to right and from right to left should be the same because in an intelligent system there is no blind zone caused by the driver’s position in a car.
+    \item The judgment on whether a car shall pass another is more scientific and less subjective.
+\end{itemize}
+
+The major goal of the intelligent system model is to achieve a high-level of traffic flow. We consider that an intelligent system won’t get tired or distracted as human do, so it doesn't make mistakes. As a result, danger won't occur unless the vehicle itself breaks down. In the aspect of safety, we simply regard it as the
+function of speed.
+
+On the basis of former analysis and previous CA model, we establish some additional rules:
+
+\begin{itemize}
+    \item Change the response time to 0.1\,s, making a smaller minimum safe gap between vehicles.
+    \item No longer change speed randomly. Change the speed toward the setting value. We adjust the free-driving speed-changing possibility ($P_a$ is possibility to accelerate, $P_b$ to decelerate) distribution table to:\begin{table}[h]\begin{center}
+    \caption{Acceleration and deceleration probability for fast cars}\begin{tabular}{ccccccc}
+    \toprule
+    $V/cell\cdot s^{-1}$&3&4&5&6&7&8\\
+    \midrule
+    $P_a$&1&1&1&1&0&0\\
+    $P_b$&0&0&0&0&0&1\\
+    \bottomrule\label{tb:fastc2}\end{tabular}
+    \caption{Acceleration and deceleration probability for slow cars}\begin{tabular}{ccccc}
+    \toprule
+    $V/cell\cdot s^{-1}$&3&4&5&6\\
+    \midrule
+    $P_a$&1&1&0&0\\
+    $P_b$&0&0&0&1\\
+    \bottomrule\label{tb:slowc2}\end{tabular}\end{center}\end{table}
+    \item Change the overtaking probability $P_0$ from:\[P_0=\begin{cases}1-0.9\cdot \mathrm{e}^{V_{max2}-V_{max1}},&\text{ if }  V_{max2}<V_{max1};\\0.1,&\text{ if }  V_{max2}\ge V_{max1}.\end{cases}\]
+        to:
+        \[P_0=\begin{cases}1- \mathrm{e}^{V_{max2}-V_{max1}},&\text{ if }  V_{max2}<V_{max1};\\0,&\text{ if }  V_{max2}\ge V_{max1}.\end{cases}\]
+\end{itemize}
+
+\subsection{Result of Intelligent System}
+When the inflow rate is low, the keep-right rule is better in promoting the average velocity. This is easy to understand. Under the unrestricted rule, slower vehicles won’t change lanes unless for overtaking. Thus they may block the entire road, resulting in a poor performance. But the keep-right rule will provide faster vehicles with more chances for overtaking.
+
+When the inflow rate becomes high, the density of the road will be unbalanced under the keep-right rule. The rightmost lane becomes so crowded that the average speed decreases greatly. But vehicles are evenly distributed on the road under the unrestricted rule, so the freeway won’t get that crowded.
+
+\section{Conclusions}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=9cm]{figure18}
+    \caption{Average Velocity under Different Rules in an Intelligent System}
+    \label{fig:intelligent}
+\end{figure}
+
+Keeping to the right side of the road is an accepted traffic regulation in many countries, and some countries even make it a law. Through the establishment of a reasonable model and the simulation of actual road conditions, we find that the Keep right except to pass rule can separate the fast and slow vehicles into different lanes to some extent. Fast vehicles will receive fewer constraints from the traffic flow, so that freeway carrying capacity and people’s travel efficiency are improved. (Although in our multi-lane simulation, unrestricted rule performs a little better in heavy traffic, but it also brings huge risk compared with keep-right-except-to-pass rule, so we recommend keep-right-expect-to-pass rule.)
+
+The velocity limit directly influences traffic security; the higher the speed limit, the more insecure the freeway. But it is irrational to lower the speed limit blindly, resulting in unnecessary loss in traffic efficiency. How to balance between velocity and safety asks for further study on the performance of vehicles and accident frequency under different speed limits.
+
+In countries like Britain and Japan, vehicles are mostly right-hand drive (vehicle controls are located at the right-hand side). Security risks are higher if passing from the left side. Therefore, they formulate a rule exactly mirror symmetrical to the Keep right except to pass rule, i.e. the Keep left except to pass rule, to lower the incidence of traffic accidents.
+
+When we look at the model under the control of an intelligent system, where crashes and collisions won’t happen, the keep-right rule yields higher average velocity in light traffic and the unrestricted rule performs better in heavy traffic. Therefore, we put forward a new driving rule for transportation fully controlled by an intelligent system seeking for best performance: When the inflow rate is lower than 1.5\,veh/s, a vehicle should follow the keep-right rule. Otherwise, it follows the unrestricted rule.
+
+\section{Strengths and Weaknesses}
+Like any model, the one present above has its strengths and weaknesses. Some of the major points are presented below.
+
+\subsection{Strengths}
+\begin{itemize}
+    \item \textbf{Fully consideration of the mental state of the driver}
+
+        In the vehicle-following model, we fully consider the overtaking psychology of drivers. The overtaking probability is greater when a fast car is after a slow car, or when the velocity difference is larger.
+
+        In the free-driving style, the speed of a vehicle will go up or down according to the unique probability distribution, which simulates the unpredictable slight change in speed in real-world driving.
+    \item \textbf{Easy to assess the safety of the system}
+
+        We exclude the possibility of crash in our model, but use the danger index to assess the security of the system. Such practice consists with the low probability of crash in real world.
+\end{itemize}
+
+\subsection{Weaknesses}
+\begin{itemize}
+    \item \textbf{Not accurate enough}
+
+    The change unit (a cell) of the gap and the velocity is relatively big, which may harm the accuracy of the simulation.
+    \item \textbf{Values of some parameters are not very scientific}
+
+    Some parameters lack real-life data, so we have to estimate based on common sense.
+\end{itemize}
+
+\nocite{Emden1970}
+\nocite{Wheeler1973}
+\addcontentsline{toc}{section}{References}
+\bibliography{testquicksort}
+
+
+% ==============以下为附录内容，如您的论文中不需要程序附录请自行删除====================
+\clearpage
+\begin{subappendices}						% 附录环境
+\section*{Apendix: The source codes}		% 附录标题可以自行修改
+\addcontentsline{toc}{section}{Appendix}  	% 将附录内容加入到目录中
+
+This MATLAB program is used to calculate the value of variable $a$.
+\begin{lstlisting}[language=Matlab, caption=\texttt{temp.m}]
+a = 0;
+for i = 1:5
+	a = a + 1;
+end
+\end{lstlisting}
+
+This LINGO program is used to search the optimize solution of 0-1 problem.
+\begin{lstlisting}[language=Lingo, caption=\texttt{temp.lg4}]
+model:
+sets:
+WP/1..12/: M, W, X;
+endsets
+data:
+M = 2 5 18 3 2 5 10 4 11 7 14 6;
+W = 5 10 13 4 3 11 13 10 8 16 7 4;
+enddata
+max = @sum(WP:W*X);
+@sum(WP: M * X)<=46;
+@for(WP: @bin(X));
+end
+\end{lstlisting}
+
+\end{subappendices}
+% =================================================================================
+
+
+
+\end{document}
